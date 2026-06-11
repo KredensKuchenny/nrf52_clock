@@ -57,6 +57,8 @@ Podsystemy i ich zależności:
 
 Zasada działania jest **zdarzeniowa**: przerwania (RTC2, przycisk, BLE) ustawiają flagi/stan, a pętla je obsługuje i większość czasu śpi (`delay()` w trybie tickless faktycznie usypia CPU).
 
+![screenshot](nrf52_clock.png)
+
 ---
 
 ## 2. Sprzęt i piny
