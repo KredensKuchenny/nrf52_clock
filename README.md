@@ -653,6 +653,8 @@ void loop(void) {
 
 `nrf52_clock_console.html` (Chrome/Edge, Web Bluetooth): łączy się po UUID usługi, pokazuje dane na żywo, ustawia czas (z auto‑potwierdzeniem na pełnej minucie), rysuje **wykresy na żywo** (T/H/bateria/RSSI) z przełącznikiem zakresu 5/10/15/30/60 min i tooltipem (wartość + godzina próbki). Parsuje string z sekcji 16; datę czyta jako `DD-MM-YYYY`; napięcie ukrywa przy ładowaniu. Gdy `S=0` (awaria czujnika) w kafelkach temperatury i wilgotności pokazuje czerwone **`BŁĄD`** i nie dorzuca błędnych próbek do wykresów.
 
+![screenshot](nrf52_clock_console.png)
+
 ---
 
 ## 22. Przykłady z życia (scenariusze)
