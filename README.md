@@ -41,7 +41,7 @@ Urządzenie to zegar z kalendarzem oraz pomiarem temperatury i wilgotności, z i
 Podsystemy i ich zależności:
 
 ```
-            ┌────────────────────────────────────────────┐
+            ┌──────────────────────────────────────────────┐
             │                  loop()                      │
             │  (FreeRTOS task, tickless idle, delay())     │
             └───┬───────┬──────────┬───────────┬───────────┘
