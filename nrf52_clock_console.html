@@ -1,0 +1,659 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nRF52 Clock — Konsola</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0e0d;
+    --panel:#111816;
+    --panel-2:#0d1311;
+    --line:#1e2a27;
+    --ink:#e8efe9;
+    --muted:#7f928c;
+    --amber:#e9a23b;
+    --amber-dim:#7a5a22;
+    --mint:#54d3b4;
+    --danger:#e5604d;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+    --sans:'IBM Plex Sans',system-ui,sans-serif;
+    --display:'Bricolage Grotesque','Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:var(--sans);
+    color:var(--ink);
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(233,162,59,.10), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(84,211,180,.08), transparent 55%),
+      var(--bg);
+    background-attachment: fixed;   /* pin glows to viewport: no "doubled" gradient on scroll */
+    min-height:100%;
+    padding:28px 18px 60px;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* fine grid + grain texture */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background-image:
+      linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
+    background-size:34px 34px;
+    mask-image:radial-gradient(circle at 50% 30%, #000 0%, transparent 80%);
+  }
+  .wrap{max-width:780px;margin:0 auto;position:relative;z-index:1}
+
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:26px;
+    animation:rise .6s ease both}
+  .brand h1{font-family:var(--display);font-weight:700;font-size:clamp(30px,5.4vw,46px);line-height:.98;margin:0;letter-spacing:-.015em}
+  .brand h1 em{font-style:normal;color:var(--amber)}
+  .brand p{margin:6px 0 0;color:var(--muted);font-size:13px;letter-spacing:.04em}
+
+  .pill{display:inline-flex;align-items:center;gap:9px;border:1px solid var(--line);
+    background:var(--panel-2);border-radius:999px;padding:8px 14px;font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--danger);box-shadow:0 0 0 0 rgba(229,96,77,.5)}
+  .pill.on{color:var(--mint);border-color:#1f3b34}
+  .pill.on .dot{background:var(--mint);animation:pulse 1.8s infinite}
+
+  .grid{display:grid;gap:18px}
+  .card{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--line);
+    border-radius:16px;padding:22px;position:relative;overflow:hidden;animation:rise .6s ease both}
+  .card h2{margin:0 0 16px;font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);font-weight:500}
+  .card.accent{border-color:#33291399}
+  .card.accent::after{content:"";position:absolute;inset:0;background:radial-gradient(500px 200px at 100% 0,rgba(233,162,59,.07),transparent 60%);pointer-events:none}
+
+  /* live readout */
+  .readout .clock{font-family:var(--mono);font-weight:600;font-size:clamp(46px,12vw,84px);line-height:1;letter-spacing:1px;
+    color:var(--amber);text-shadow:0 0 26px rgba(233,162,59,.35);margin:2px 0 4px}
+  .readout .date{font-family:var(--mono);color:var(--ink);font-size:15px;letter-spacing:.06em;opacity:.85}
+  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:20px}
+  .metric{background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:12px}
+  .metric .k{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+  .metric .v{font-family:var(--mono);font-size:21px;margin-top:6px}
+  .metric .v small{font-size:12px;color:var(--muted)}
+  .metric .sub{font-family:var(--mono);font-size:13px;color:var(--amber);margin-top:3px;min-height:16px;font-variant-numeric:tabular-nums}
+  @media(max-width:560px){.metrics{grid-template-columns:repeat(2,1fr)}}
+
+  .pcclock{display:flex;align-items:center;justify-content:space-between;gap:12px;
+    background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:16px}
+  .pcclock .k{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+  .pcclock .v{font-family:var(--mono);font-size:16px;color:var(--amber);font-variant-numeric:tabular-nums}
+
+  .charts{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+  .chart-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .seg button{background:transparent;border:0;border-right:1px solid var(--line);border-radius:0;color:var(--muted);
+    font-family:var(--mono);font-size:11px;letter-spacing:.04em;padding:7px 13px;cursor:pointer;transition:background .15s,color .15s}
+  .seg button:last-child{border-right:0}
+  .seg button:hover{color:var(--ink);background:rgba(255,255,255,.04)}
+  .seg button.on{background:rgba(233,162,59,.14);color:var(--amber)}
+  @media(max-width:560px){.charts{grid-template-columns:1fr}}
+  .chart{background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:10px 12px}
+  .chart-hd{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+  .chart-hd .k{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+  .chart-hd .cv{font-family:var(--mono);font-size:15px;color:var(--amber);font-variant-numeric:tabular-nums}
+  .chart canvas{width:100%;height:90px;display:block;cursor:crosshair}
+  .charttip{position:fixed;z-index:50;pointer-events:none;background:var(--panel);border:1px solid var(--line);
+    border-radius:8px;padding:5px 9px;font-family:var(--mono);font-size:12px;color:var(--ink);
+    box-shadow:0 8px 22px rgba(0,0,0,.45);display:flex;gap:9px;align-items:baseline;white-space:nowrap}
+  .charttip b{color:var(--amber);font-weight:600}
+  .charttip span{color:var(--muted);font-size:11px}
+
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  label.field{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 7px}
+  input[type=datetime-local],input[type=text],input[type=number]{
+    font-family:var(--mono);font-size:15px;color:var(--ink);background:var(--panel-2);
+    border:1px solid var(--line);border-radius:10px;padding:11px 13px;width:100%;outline:none;transition:border-color .15s,box-shadow .15s}
+  input:focus{border-color:var(--amber-dim);box-shadow:0 0 0 3px rgba(233,162,59,.12)}
+  input::placeholder{color:#42514c}
+
+  button{font-family:var(--sans);font-weight:500;font-size:14px;cursor:pointer;border-radius:10px;
+    padding:11px 18px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);
+    transition:transform .08s,border-color .15s,background .15s}
+  button:hover{border-color:#33433e}
+  button:active{transform:translateY(1px)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.primary{background:var(--amber);color:#1a1206;border-color:transparent;font-weight:600}
+  button.primary:hover{background:#f2ad48}
+  button.confirm{background:rgba(233,162,59,.10);color:var(--amber);border-color:var(--amber-dim);font-weight:600}
+  button.confirm:hover{background:rgba(233,162,59,.20);border-color:var(--amber)}
+  button.armed{border-color:var(--amber);color:var(--amber);background:rgba(233,162,59,.08);animation:pulse2 1.6s infinite}
+  @keyframes pulse2{0%{box-shadow:0 0 0 0 rgba(233,162,59,.4)}70%{box-shadow:0 0 0 6px rgba(233,162,59,0)}100%{box-shadow:0 0 0 0 rgba(233,162,59,0)}}
+  button.ghost{background:transparent}
+
+  .hint{font-size:13px;color:var(--muted);line-height:1.5;margin:12px 0 0}
+  .step{display:flex;gap:11px;align-items:baseline;margin:0 0 4px}
+  .step b{font-family:var(--mono);color:var(--amber);font-size:13px}
+
+  details.settings summary{cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);list-style:none;padding:4px 0}
+  details.settings summary::-webkit-details-marker{display:none}
+  details.settings summary::before{content:"▸ ";color:var(--amber)}
+  details.settings[open] summary::before{content:"▾ "}
+  .uuidgrid{display:grid;gap:12px;margin-top:14px}
+  .uuidgrid input{font-size:12.5px}
+
+  .console{font-family:var(--mono);font-size:12px;line-height:1.55;background:#070b0a;border:1px solid var(--line);
+    border-radius:11px;padding:14px;height:150px;overflow:auto;color:#9fb3ac;white-space:pre-wrap;word-break:break-word}
+  .console .t{color:#42514c}
+  .console .ok{color:var(--mint)}
+  .console .err{color:var(--danger)}
+  .console .info{color:var(--amber)}
+
+  .unsupported{background:#2a1410;border:1px solid #5a2a22;color:#f0b5ab;padding:14px 16px;border-radius:12px;font-size:14px;margin-bottom:18px;display:none}
+
+  footer{margin-top:26px;color:var(--muted);font-size:12px;font-family:var(--mono);text-align:center;line-height:1.7}
+
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(84,211,180,.5)}70%{box-shadow:0 0 0 7px rgba(84,211,180,0)}100%{box-shadow:0 0 0 0 rgba(84,211,180,0)}}
+  /* staggered load */
+  header{animation-delay:.02s}
+  .card:nth-of-type(1){animation-delay:.08s}
+  .card:nth-of-type(2){animation-delay:.14s}
+  .card:nth-of-type(3){animation-delay:.20s}
+  .card:nth-of-type(4){animation-delay:.26s}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <h1>nRF52 <em>Clock</em></h1>
+      <p>Web Bluetooth · konsola sterowania</p>
+    </div>
+    <div class="pill" id="status"><span class="dot"></span><span id="statusText">Rozłączono</span></div>
+  </header>
+
+  <div class="unsupported" id="unsupported">
+    Ta przeglądarka nie obsługuje Web Bluetooth. Użyj <b>Chrome</b> lub <b>Edge</b> (desktop albo Android),
+    a stronę otwórz przez <b>https</b> lub <b>localhost</b> (na desktopie działa też z pliku).
+  </div>
+
+  <div class="grid">
+
+    <!-- LIVE READOUT -->
+    <section class="card readout">
+      <h2>Aktualne dane</h2>
+      <div class="clock" id="rClock">--:--:--</div>
+      <div class="date" id="rDate">— — —</div>
+      <div class="metrics">
+        <div class="metric"><div class="k">Temp.</div><div class="v" id="rTemp">--<small>°C</small></div></div>
+        <div class="metric"><div class="k">Wilgotność</div><div class="v" id="rHum">--<small>%</small></div></div>
+        <div class="metric"><div class="k">Bateria</div><div class="v" id="rBat">--<small>%</small></div><div class="sub" id="rVolt"></div></div>
+        <div class="metric"><div class="k">Zasilanie</div><div class="v" id="rChg">—</div></div>
+      </div>
+      <div class="row" style="margin-top:18px">
+        <button class="primary" id="btnConnect">Połącz z urządzeniem</button>
+        <button class="ghost" id="btnRead" disabled>Odśwież odczyt</button>
+        <button class="ghost" id="btnDisconnect" disabled>Rozłącz</button>
+      </div>
+    </section>
+
+    <!-- LIVE CHARTS -->
+    <section class="card">
+      <div class="chart-head">
+        <h2 style="margin:0">Wykresy na żywo</h2>
+        <div class="seg" id="chartRange">
+          <button type="button" data-min="5" class="on">5 min</button>
+          <button type="button" data-min="10">10 min</button>
+          <button type="button" data-min="15">15 min</button>
+          <button type="button" data-min="30">30 min</button>
+          <button type="button" data-min="60">1 h</button>
+        </div>
+      </div>
+      <div class="charts">
+        <div class="chart"><div class="chart-hd"><span class="k">Temperatura</span><span class="cv" id="cvTemp">—</span></div><canvas id="chTemp"></canvas></div>
+        <div class="chart"><div class="chart-hd"><span class="k">Wilgotność</span><span class="cv" id="cvHum">—</span></div><canvas id="chHum"></canvas></div>
+        <div class="chart"><div class="chart-hd"><span class="k">Bateria</span><span class="cv" id="cvBat">—</span></div><canvas id="chBat"></canvas></div>
+        <div class="chart"><div class="chart-hd"><span class="k">Sygnał · RSSI</span><span class="cv" id="cvRssi">—</span></div><canvas id="chRssi"></canvas></div>
+      </div>
+      <div class="hint" style="margin-top:8px"><div class="step"><span>Dane zbierane na żywo po połączeniu.</span></div></div>
+    </section>
+
+    <!-- SET TIME -->
+    <section class="card accent">
+      <h2>Ustaw datę i godzinę</h2>
+
+      <div class="pcclock">
+        <span class="k">Czas komputera</span>
+        <span class="v" id="pcClock">--.--.---- --:--:--</span>
+      </div>
+
+      <div class="row" style="align-items:flex-end">
+        <div style="flex:1;min-width:220px">
+          <label class="field" for="dt">Data i godzina</label>
+          <input type="datetime-local" id="dt" step="1">
+        </div>
+        <button class="ghost" id="btnRound" title="Ustawia najbliższą pełną minutę w górę — wyślij i potwierdź dokładnie, gdy zegar komputera ją wybije">Pełna minuta ↑</button>
+        <button class="primary" id="btnSend" disabled>Wyślij →</button>
+      </div>
+
+      <div class="hint">
+        <div class="step"><b>1</b><span>Wyślij datę/godzinę — urządzenie pokaże na ekranie <b>4-cyfrowy kod</b>.</span></div>
+        <div class="step"><b>2</b><span>Przepisz kod poniżej i <b>potwierdź dokładnie</b>, gdy zegar komputera wybije ustawioną minutę (kod ważny 60&nbsp;s).</span></div>
+      </div>
+
+      <div class="row" style="margin-top:16px;align-items:flex-end">
+        <div style="width:160px">
+          <label class="field" for="code">Kod z ekranu</label>
+          <input type="number" id="code" placeholder="0000" inputmode="numeric" maxlength="4">
+        </div>
+        <button class="confirm" id="btnConfirm" disabled>Potwierdź ✓</button>
+        <button class="ghost" id="btnAuto" disabled title="Potwierdzi automatycznie, gdy zegar komputera wskoczy na wysłaną godzinę">Auto o godzinie ⏱</button>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="card">
+      <details class="settings">
+        <summary>Ustawienia zaawansowane · UUID charakterystyk</summary>
+        <p class="hint" style="margin-top:12px">
+          Domyślne wartości pasują do dostarczonego firmware'u. Na innym urządzeniu UUID-y mogą się różnić —
+          wpisz właściwe przed połączeniem.
+        </p>
+        <div class="uuidgrid">
+          <div><label class="field">Serwis</label><input type="text" id="uSvc"></div>
+          <div><label class="field">Dane (read/notify)</label><input type="text" id="uData"></div>
+          <div><label class="field">Ustaw czas (write)</label><input type="text" id="uSet"></div>
+          <div><label class="field">Potwierdzenie (write)</label><input type="text" id="uConf"></div>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted);cursor:pointer">
+            <input type="checkbox" id="allDevices" style="width:auto"> Pokaż wszystkie urządzenia (gdy nie widać po serwisie)
+          </label>
+          <button class="ghost" id="btnReset" style="margin-left:auto">Przywróć domyślne</button>
+        </div>
+      </details>
+    </section>
+
+    <!-- CONSOLE -->
+    <section class="card">
+      <h2>Log</h2>
+      <div class="console" id="log"></div>
+    </section>
+
+  </div>
+
+  <footer>
+    Otwórz w Chrome / Edge · BLE musi być włączone w urządzeniu<br>
+    nRF52840 SuperMini Clock
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+const DEFAULTS = {
+  svc : "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e100",
+  data: "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e101",
+  set : "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e102",
+  conf: "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e103",
+};
+
+const $ = id => document.getElementById(id);
+const els = {
+  status:$("status"), statusText:$("statusText"),
+  connect:$("btnConnect"), read:$("btnRead"), disconnect:$("btnDisconnect"),
+  send:$("btnSend"), confirm:$("btnConfirm"), auto:$("btnAuto"), round:$("btnRound"), reset:$("btnReset"),
+  dt:$("dt"), code:$("code"), pcClock:$("pcClock"),
+  uSvc:$("uSvc"), uData:$("uData"), uSet:$("uSet"), uConf:$("uConf"),
+  allDevices:$("allDevices"), log:$("log"),
+  rClock:$("rClock"), rDate:$("rDate"), rTemp:$("rTemp"), rHum:$("rHum"), rBat:$("rBat"), rVolt:$("rVolt"), rChg:$("rChg"),
+  chTemp:$("chTemp"), chHum:$("chHum"), chBat:$("chBat"), chRssi:$("chRssi"),
+  cvTemp:$("cvTemp"), cvHum:$("cvHum"), cvBat:$("cvBat"), cvRssi:$("cvRssi"),
+};
+
+let device=null, server=null, service=null, dataChar=null, setChar=null, confChar=null;
+let autoTimer=null, lastSentTarget=null;   // for auto-confirm at the sent time
+
+/* ---------- helpers ---------- */
+function log(msg, cls){
+  const t = new Date().toLocaleTimeString();
+  const line = document.createElement("div");
+  line.innerHTML = `<span class="t">${t}</span>  <span class="${cls||""}">${msg}</span>`;
+  els.log.appendChild(line);
+  els.log.scrollTop = els.log.scrollHeight;
+}
+const pad = n => String(n).padStart(2,"0");
+function deviceTimeString(d){
+  // firmware expects: DD-MM-YYYY HH:MM:SS
+  return `${pad(d.getDate())}-${pad(d.getMonth()+1)}-${d.getFullYear()} `+
+         `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+function fillInput(d){
+  // datetime-local needs local ISO without timezone, with seconds
+  els.dt.value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T`+
+                 `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+// Round the current time UP to the next full minute (seconds = 00). Sending this
+// and confirming exactly when the computer clock hits that minute gives a precise set.
+function setNextFullMinute(){
+  const d = new Date();
+  if(d.getSeconds() > 0 || d.getMilliseconds() > 0){ d.setMinutes(d.getMinutes()+1); }
+  d.setSeconds(0,0);
+  fillInput(d);
+}
+// Live computer date/time, updated every second.
+function startPcClock(){
+  const tick = ()=>{
+    const d = new Date();
+    els.pcClock.textContent =
+      `${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()} `+
+      `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  };
+  tick();
+  setInterval(tick, 1000);
+}
+
+/* ---------- UUID persistence ---------- */
+function loadUuids(){
+  let saved={};
+  try{ saved = JSON.parse(localStorage.getItem("nrf52clk_uuids")||"{}"); }catch(e){}
+  els.uSvc.value  = saved.svc  || DEFAULTS.svc;
+  els.uData.value = saved.data || DEFAULTS.data;
+  els.uSet.value  = saved.set  || DEFAULTS.set;
+  els.uConf.value = saved.conf || DEFAULTS.conf;
+}
+function saveUuids(){
+  const u = {svc:val("uSvc"), data:val("uData"), set:val("uSet"), conf:val("uConf")};
+  try{ localStorage.setItem("nrf52clk_uuids", JSON.stringify(u)); }catch(e){}
+}
+const val = id => els[id].value.trim().toLowerCase();
+
+/* ---------- connection ---------- */
+function setConnected(on){
+  els.status.classList.toggle("on", on);
+  els.statusText.textContent = on ? "Połączono" : "Rozłączono";
+  els.connect.disabled   = on;
+  els.read.disabled      = !on;
+  els.disconnect.disabled= !on;
+  els.send.disabled      = !on;
+  els.confirm.disabled   = !on;
+  els.auto.disabled      = !on;
+  if(!on) cancelAuto();
+}
+
+async function connect(){
+  if(!navigator.bluetooth){ log("Web Bluetooth niedostępne w tej przeglądarce.","err"); return; }
+  const svc = val("uSvc");
+  saveUuids();
+  try{
+    log("Szukam urządzenia…","info");
+    const opts = els.allDevices.checked
+      ? { acceptAllDevices:true, optionalServices:[svc] }
+      : { filters:[{ services:[svc] }], optionalServices:[svc] };
+    device = await navigator.bluetooth.requestDevice(opts);
+    log("Wybrano: "+(device.name||"(bez nazwy)"));
+    device.addEventListener("gattserverdisconnected", onDisconnected);
+
+    server  = await device.gatt.connect();
+    service = await server.getPrimaryService(svc);
+    dataChar = await service.getCharacteristic(val("uData"));
+    setChar  = await service.getCharacteristic(val("uSet"));
+    confChar = await service.getCharacteristic(val("uConf"));
+    log("Połączono i znaleziono charakterystyki.","ok");
+    setConnected(true);
+
+    try{
+      await dataChar.startNotifications();
+      dataChar.addEventListener("characteristicvaluechanged", e => handleData(e.target.value, true));
+      log("Powiadomienia włączone (dane na żywo).","ok");
+    }catch(e){ log("Brak powiadomień — używam ręcznego odczytu.","info"); }
+
+    await readData();
+  }catch(err){
+    log("Błąd połączenia: "+err.message,"err");
+    setConnected(false);
+  }
+}
+
+function onDisconnected(){
+  log("Urządzenie rozłączone.","err");
+  setConnected(false);
+}
+
+function disconnect(){
+  if(device && device.gatt.connected) device.gatt.disconnect();
+}
+
+/* ---------- data ---------- */
+async function readData(){
+  if(!dataChar) return;
+  try{ handleData(await dataChar.readValue()); }
+  catch(err){ log("Odczyt nieudany: "+err.message,"err"); }
+}
+
+function handleData(dv, fromNotify){
+  const txt = new TextDecoder().decode(dv);
+  // format: "DD-MM-YYYY HH:MM:SS;T=..;H=..;B=..;V=..;CHG=..;R=..;S=.." (S = sensor OK 1/0)
+  const parts = txt.split(";");
+  const dtPart = parts[0] || "";
+  const kv = {};
+  parts.slice(1).forEach(p=>{ const i=p.indexOf("="); if(i>0) kv[p.slice(0,i)]=p.slice(i+1); });
+
+  // If a NOTIFY packet was truncated by a small MTU, the tail fields are missing.
+  // Pull the complete value with a READ (read-blob returns it whole) and bail.
+  if(fromNotify && !("CHG" in kv)){ readData(); return; }
+
+  const [datePart, timePart] = dtPart.split(" ");
+  els.rClock.textContent = timePart || "--:--:--";
+  els.rDate.textContent  = datePart ? prettyDate(datePart) : "—";
+  const charging = kv.CHG === "1";
+  // S = sensor health from firmware (1 = OK, 0 = fault). Absent -> assume OK (older firmware).
+  const sensorOk = !("S" in kv) || kv.S === "1";
+  // Fault marker in the console palette: a muted "—" (no reading) plus a small
+  // uppercase amber tag, instead of an off-palette bright red.
+  const errHtml = `<span style="color:var(--muted);text-shadow:none">—</span>`
+    + `<small style="color:var(--amber);font-family:var(--mono);font-size:10px;`
+    + `letter-spacing:.14em;text-transform:uppercase;margin-left:7px;vertical-align:middle">błąd</small>`;
+  if("T" in kv){
+    if(sensorOk){ els.rTemp.innerHTML = `${kv.T}<small>°C</small>`; pushSeries(series.temp, parseFloat(kv.T)); els.cvTemp.textContent = `${kv.T} °C`; }
+    else        { els.rTemp.innerHTML = errHtml; els.cvTemp.textContent = "—"; }   // don't chart garbage
+  }
+  if("H" in kv){
+    if(sensorOk){ els.rHum.innerHTML  = `${kv.H}<small>%</small>`;  pushSeries(series.hum,  parseFloat(kv.H)); els.cvHum.textContent  = `${kv.H} %`; }
+    else        { els.rHum.innerHTML  = errHtml; els.cvHum.textContent = "—"; }
+  }
+  // While charging the % can't be measured (firmware reports 100) — that's misleading, so show "—".
+  if("B" in kv){ els.rBat.innerHTML  = charging ? "—" : `${kv.B}<small>%</small>`;
+                 if(!charging){ pushSeries(series.bat, parseFloat(kv.B)); els.cvBat.textContent = `${kv.B} %`; } else els.cvBat.textContent = "ład."; }
+  // Voltage only on battery; while charging VDDH is the USB rail (meaningless), so hide it.
+  if("V" in kv) els.rVolt.textContent = charging ? "" : `${kv.V} V`;
+  if("CHG" in kv) els.rChg.textContent = charging ? "USB / ład." : "Bateria";
+  if("R" in kv){ pushSeries(series.rssi, parseInt(kv.R,10)); els.cvRssi.textContent = `${kv.R} dBm`; }
+  redrawCharts();
+}
+
+/* ---------- live charts (vanilla canvas sparklines) ---------- */
+const HIST = 3600;                                  // keep up to 1 h at ~1 Hz
+let winSec = 300;                                   // visible window (default 5 min)
+// each sample is {v: value, ts: epoch-ms} so we can show "when" on hover
+const series = { temp:[], hum:[], bat:[], rssi:[] };
+function pushSeries(arr, v){ if(v==null || isNaN(v)) return; arr.push({v, ts: Date.now()}); if(arr.length>HIST) arr.shift(); }
+
+function drawSpark(canvas, data, opts){
+  if(!canvas) return;
+  canvas._data = data; canvas._opts = opts;          // remember for hover redraw
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth || 300, cssH = canvas.clientHeight || 90;
+  if(canvas.width !== Math.round(cssW*dpr) || canvas.height !== Math.round(cssH*dpr)){
+    canvas.width = Math.round(cssW*dpr); canvas.height = Math.round(cssH*dpr);
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,cssW,cssH);
+  const pad = 6, w = cssW-pad*2, h = cssH-pad*2;
+  ctx.strokeStyle = "rgba(255,255,255,.07)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad, pad+h); ctx.lineTo(pad+w, pad+h); ctx.stroke();
+  if(data.length < 2) return;
+  const vals = data.map(d => d.v);
+  let lo = (opts.min!=null) ? opts.min : Math.min(...vals);
+  let hi = (opts.max!=null) ? opts.max : Math.max(...vals);
+  if(lo === hi){ lo -= 1; hi += 1; }
+  const X = i => pad + (i/(data.length-1))*w;
+  const Y = v => pad + (1-(Math.max(lo,Math.min(hi,v))-lo)/(hi-lo))*h;
+  const col = opts.color || "#e9a23b";
+  // area fill
+  ctx.beginPath(); ctx.moveTo(X(0), Y(vals[0]));
+  for(let i=1;i<vals.length;i++) ctx.lineTo(X(i), Y(vals[i]));
+  ctx.lineTo(X(vals.length-1), pad+h); ctx.lineTo(X(0), pad+h); ctx.closePath();
+  const g = ctx.createLinearGradient(0, pad, 0, pad+h);
+  g.addColorStop(0, col+"33"); g.addColorStop(1, col+"00");
+  ctx.fillStyle = g; ctx.fill();
+  // line
+  ctx.beginPath(); ctx.moveTo(X(0), Y(vals[0]));
+  for(let i=1;i<vals.length;i++) ctx.lineTo(X(i), Y(vals[i]));
+  ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke();
+  // hover guide + marker, or just the last point
+  const hi2 = opts.hoverIdx;
+  if(hi2!=null && hi2>=0 && hi2<vals.length){
+    const hx = X(hi2), hy = Y(vals[hi2]);
+    ctx.strokeStyle = "rgba(255,255,255,.20)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(hx, pad); ctx.lineTo(hx, pad+h); ctx.stroke();
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(hx, hy, 3.4, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,.55)"; ctx.lineWidth = 1.5; ctx.stroke();
+  } else {
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(X(vals.length-1), Y(vals[vals.length-1]), 2.2, 0, Math.PI*2); ctx.fill();
+  }
+}
+function redrawCharts(){
+  const w = s => s.slice(-winSec);                  // last N samples (~seconds)
+  drawSpark(els.chTemp, w(series.temp), {color:"#e9a23b", unit:"°C", dec:1});
+  drawSpark(els.chHum,  w(series.hum),  {color:"#e9a23b", unit:"%",  dec:0, min:0,    max:100});
+  drawSpark(els.chBat,  w(series.bat),  {color:"#e9a23b", unit:"%",  dec:0, min:0,    max:100});
+  drawSpark(els.chRssi, w(series.rssi), {color:"#54d3b4", unit:"dBm",dec:0, min:-100, max:-30});
+}
+window.addEventListener("resize", redrawCharts);
+
+// Time-range selector (5/10/15/30/60 min).
+$("chartRange").addEventListener("click", e => {
+  const b = e.target.closest("button[data-min]");
+  if(!b) return;
+  winSec = parseInt(b.dataset.min,10) * 60;
+  [...e.currentTarget.children].forEach(x => x.classList.toggle("on", x === b));
+  redrawCharts();
+});
+
+// Hover tooltip: shows the sample value and the time it was taken.
+const chartTip = document.createElement("div");
+chartTip.className = "charttip"; chartTip.style.display = "none";
+document.body.appendChild(chartTip);
+function fmtVal(v, o){ return `${Number(v).toFixed(o.dec!=null?o.dec:1)} ${o.unit||""}`.trim(); }
+[els.chTemp, els.chHum, els.chBat, els.chRssi].forEach(cv => {
+  cv.addEventListener("mousemove", e => {
+    const data = cv._data, opts = cv._opts;
+    if(!data || data.length < 2){ chartTip.style.display = "none"; return; }
+    const rect = cv.getBoundingClientRect();
+    const PAD = 6, w = (cv.clientWidth||300) - PAD*2;
+    let idx = Math.round(((e.clientX - rect.left) - PAD) / w * (data.length-1));
+    idx = Math.max(0, Math.min(data.length-1, idx));
+    drawSpark(cv, data, {...opts, hoverIdx: idx});
+    const s = data[idx], t = new Date(s.ts);
+    chartTip.innerHTML = `<b>${fmtVal(s.v, opts)}</b><span>${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}</span>`;
+    chartTip.style.display = "flex";
+    let lft = e.clientX + 12; if(lft > window.innerWidth - 130) lft = e.clientX - 130;
+    chartTip.style.left = lft + "px"; chartTip.style.top = (e.clientY + 14) + "px";
+  });
+  cv.addEventListener("mouseleave", () => { chartTip.style.display = "none"; if(cv._data) drawSpark(cv, cv._data, cv._opts); });
+});
+
+function prettyDate(s){ // DD-MM-YYYY -> nice (e.g. "31 gru 2025")
+  const [d,m,y] = s.split("-");
+  const names=["","sty","lut","mar","kwi","maj","cze","lip","sie","wrz","paź","lis","gru"];
+  return `${d} ${names[parseInt(m,10)]||m} ${y}`;
+}
+
+/* ---------- writes ---------- */
+async function writeStr(ch, str){
+  const bytes = new TextEncoder().encode(str);
+  if(ch.writeValueWithResponse){
+    try{ await ch.writeValueWithResponse(bytes); return; }catch(e){}
+  }
+  await ch.writeValue(bytes);
+}
+
+async function sendTime(){
+  if(!setChar) return;
+  if(!els.dt.value){ setNextFullMinute(); }
+  const d = new Date(els.dt.value);
+  if(isNaN(d.getTime())){ log("Nieprawidłowa data.","err"); return; }
+  const s = deviceTimeString(d);
+  lastSentTarget = d;                       // remember target for auto-confirm
+  try{
+    await writeStr(setChar, s);
+    log("Wysłano czas: "+s+" — sprawdź KOD na ekranie urządzenia.","info");
+    els.code.focus();
+  }catch(err){ log("Wysyłka nieudana: "+err.message,"err"); }
+}
+
+async function sendConfirm(){
+  if(!confChar) return;
+  cancelAuto();                              // any pending auto is now resolved
+  const code = els.code.value.trim();
+  if(!/^\d{4}$/.test(code)){ log("Wpisz kod (4 cyfry) z ekranu.","err"); return; }
+  try{
+    await writeStr(confChar, code);
+    log("Wysłano kod "+code+". Jeśli się zgadza — zegar ustawiony.","ok");
+    els.code.value="";
+    setTimeout(readData, 600);
+  }catch(err){ log("Potwierdzenie nieudane: "+err.message,"err"); }
+}
+
+/* ---------- auto-confirm at the sent time ---------- */
+function fmtClock(d){ return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
+
+function cancelAuto(){
+  if(autoTimer){ clearInterval(autoTimer); autoTimer=null; }
+  els.auto.classList.remove("armed");
+  els.auto.textContent = "Auto o godzinie ⏱";
+}
+
+function armAuto(){
+  if(autoTimer){ cancelAuto(); log("Auto-potwierdzenie anulowane.","info"); return; }  // toggle off
+  const code = els.code.value.trim();
+  if(!/^\d{4}$/.test(code)){ log("Najpierw wpisz kod z ekranu.","err"); return; }
+  if(!lastSentTarget){ log("Najpierw wyślij czas (przycisk Wyślij).","err"); return; }
+
+  els.auto.classList.add("armed");
+  log("Uzbrojono: potwierdzę automatycznie o "+fmtClock(lastSentTarget)+" (czas komputera).","info");
+
+  autoTimer = setInterval(()=>{
+    const remain = lastSentTarget.getTime() - Date.now();
+    if(remain <= 0){
+      log("Osiągnięto "+fmtClock(lastSentTarget)+" — potwierdzam.","info");
+      sendConfirm();                         // sendConfirm() also calls cancelAuto()
+    }else{
+      els.auto.textContent = "Anuluj ("+Math.ceil(remain/1000)+" s)";
+    }
+  }, 200);
+}
+
+/* ---------- wire up ---------- */
+els.connect.addEventListener("click", connect);
+els.disconnect.addEventListener("click", disconnect);
+els.read.addEventListener("click", readData);
+els.send.addEventListener("click", sendTime);
+els.confirm.addEventListener("click", sendConfirm);
+els.auto.addEventListener("click", armAuto);
+els.round.addEventListener("click", setNextFullMinute);
+els.reset.addEventListener("click", ()=>{
+  els.uSvc.value=DEFAULTS.svc; els.uData.value=DEFAULTS.data;
+  els.uSet.value=DEFAULTS.set; els.uConf.value=DEFAULTS.conf;
+  saveUuids(); log("Przywrócono domyślne UUID-y.","info");
+});
+[els.uSvc,els.uData,els.uSet,els.uConf].forEach(i=>i.addEventListener("change",saveUuids));
+
+/* ---------- init ---------- */
+loadUuids();
+setNextFullMinute();
+startPcClock();
+if(!navigator.bluetooth){ $("unsupported").style.display="block"; els.connect.disabled=true; }
+log("Gotowe. Wlacz BLE w urzadzeniu i kliknij Polacz.","info");
+</script>
+</body>
+</html>
