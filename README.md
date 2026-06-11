@@ -3,7 +3,7 @@
 **Plik firmware:** `nrf52_clock.ino` · **Aplikacja towarzysząca:** `nrf52_clock_console.html` (Web Bluetooth)
 **Rdzeń płytki:** [pdcook/nRFMicro-Arduino-Core](https://github.com/pdcook/nRFMicro-Arduino-Core) (FreeRTOS + SoftDevice S140)
 
-Ten dokument opisuje architekturę, każdy podsystem, kluczowe fragmenty kodu, przykłady działania oraz przypadki brzegowe (wyjątki). Wszystkie opisy zweryfikowano względem kodu źródłowego.
+Ten dokument opisuje architekturę, każdy podsystem, kluczowe fragmenty kodu, przykłady działania oraz przypadki brzegowe (wyjątki).
 
 ---
 
